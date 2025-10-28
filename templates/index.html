@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heart Health Predictor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: 'Inter', sans-serif; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(59, 21, 21, 0.1);
+    }
+    
+    .card-shadow { 
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      transition: all 0.3s ease;
+    }
+    
+    .card-shadow:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    }
+    
+    .progress-bar {
+      height: 24px;
+      border-radius: 12px;
+      background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 100%);
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      border-radius: 12px;
+      background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+      width: 0%;
+      transition: width 2.5s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .progress-fill.high-risk {
+      background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%) !important;
+    }
+    
+    .progress-fill.medium-risk {
+      background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%) !important;
+    }
+    
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+      animation: shimmer 2s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+    
+    .fade-in {
+      animation: fadeIn 0.6s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .slide-in {
+      animation: slideIn 0.5s ease-out;
+    }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    
+    .pulse-heart {
+      animation: pulseHeart 2s infinite;
+    }
+   
+    
+    .floating {
+      animation: floating 3s ease-in-out infinite;
+    }
+    
+    @keyframes floating {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    
+    .btn-gradient {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-gradient:hover {
+      background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    }
+    
+    .input-focus {
+      transition: all 0.3s ease;
+    }
+    
+    .input-focus:focus {
+      transform: scale(1.02);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    
+    .nav-link {
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    
+    .nav-link::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 2px;
+      bottom: -5px;
+      left: 50%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      transition: all 0.3s ease;
+    }
+    
+    .nav-link:hover::after {
+      width: 100%;
+      left: 0;
+    }
+    
+    .result-card {
+      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+      border-left: 4px solid #3b82f6;
+    }
+    
+    .flash-message {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+      padding: 16px 24px;
+      border-radius: 12px;
+      color: white;
+      font-weight: 600;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+      transform: translateX(400px);
+      transition: transform 0.3s ease;
+    }
+    
+    .flash-message.show {
+      transform: translateX(0);
+    }
+    
+    .flash-success {
+      background: linear-gradient(135deg, #10b981, #059669);
+    }
+    
+    .flash-error {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+    
+    .flash-info {
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    }
+  </style>
+</head>
+
+<body class="text-gray-900">
+
+  <!-- Navbar -->
+  <nav class="glass-card sticky top-0 z-10 fade-in">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 pulse-heart">
+         Cardio Check
+      </h1>
+      <div id="nav-links" class="space-x-8 text-gray-700 font-medium">
+        <button class="nav-link hover:text-blue-600" onclick="showPage('home')">Home</button>
+        <button class="nav-link hover:text-blue-600" onclick="showPage('predict')">Predict</button>
+        <button class="nav-link hover:text-blue-600" onclick="showPage('results')">Reports</button>
+        <button class="nav-link hover:text-blue-600" onclick="showPage('about')">About</button>
+        <button id="login-btn" class="nav-link hover:text-blue-600" onclick="showPage('login')">Login</button>
+        <button id="logout-btn" class="nav-link hover:text-blue-600 hidden" onclick="logoutUser()">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Flash Messages -->
+  <div id="flash-container"></div>
+  
+  <main class="max-w-6xl mx-auto px-6 py-12">
+    <!-- HOME -->
+    <section id="home-page" class="space-y-10 fade-in">
+      <div class="text-center space-y-6">
+        <div class="floating">
+          <div class="text-8xl mb-6"> </div>
+        </div>
+        <h2 class="text-5xl font-bold text-white mb-4 slide-in">
+          Welcome to the Heart Health Predictor
+        </h2>
+        <p class="text-xl text-white/90 max-w-2xl mx-auto leading-relaxed slide-in">
+          Harness the power of AI to assess your cardiovascular health risk with precision and care.
+        </p>
+      </div>
+      <div class="flex justify-center space-x-4">
+        <button onclick="showPage('predict')" class="btn-gradient text-white px-8 py-4 rounded-xl shadow-lg font-semibold text-lg">
+          🚀 Start Your Health Journey
+        </button>
+        <button onclick="showPage('about')" class="glass-card text-gray-700 px-8 py-4 rounded-xl shadow-lg font-semibold text-lg hover:bg-white/20 transition-all">
+          📖 Learn More
+        </button>
+      </div>
+    </section>
+
+    <!-- PREDICT -->
+      <!-- PREDICT -->
+<section id="predict-page" class="hidden space-y-6">
+  <h2 class="text-2xl font-bold text-white mb-4">Enter Your Details / Upload Report</h2>
+  
+  <!-- Tabs -->
+  <div class="flex space-x-4 mb-4">
+    <button id="tab-manual" class="px-4 py-2 bg-blue-600 text-white rounded" onclick="showPredictTab('manual')">Manual Input</button>
+    <button id="tab-upload" class="px-4 py-2 bg-gray-200 text-gray-800 rounded" onclick="showPredictTab('upload')">Upload Report</button>
+  </div>
+  
+  <!-- Manual Input -->
+  <div id="manual-tab" class="glass-card p-8  rounded-2xl card-shadow">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Age</label>
+        <input id="age" type="number" placeholder="Age" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Gender</label>
+        <select id="sex" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Gender</option><option value="1">Male</option><option value="0">Female</option>
+        </select>
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Chest Pain Classification</label>
+        <select id="cp" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Chest Pain Type</option><option value="0">Typical Angina</option>
+          <option value="1">Atypical</option><option value="2">Non-anginal</option><option value="3">Asymptomatic</option>
+        </select>
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Blood Pressure</label>
+        <input id="trestbps" type="number" placeholder="Resting BP (mmHg)" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Cholesterol Level</label>
+        <input id="chol" type="number" placeholder="Cholesterol (mg/dl)" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Fasting Blood Sugar Test</label>
+        <select id="fbs" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Fasting Blood Sugar >120?</option><option value="1">Yes</option><option value="0">No</option>
+        </select>
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Resting ECG </label>
+        <select id="restecg" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Rest ECG</option><option value="0">Normal</option>
+          <option value="1">ST-T Abnormality</option><option value="2">LVH</option>
+        </select>
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Maximum Heart Rate </label>
+        <input id="thalach" type="number" placeholder="Max Heart Rate" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Exercise Induced Angina</label>
+        <select id="exang" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Exercise Induced Angina?</option><option value="1">Yes</option><option value="0">No</option>
+        </select>
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">ST Depression Value</label>
+        <input id="oldpeak" type="number" step="0.1" placeholder="ST Depression" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Peak Exercise ST Slope</label>
+        <select id="slope" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Slope</option><option value="0">Upsloping</option><option value="1">Flat</option><option value="2">Downsloping</option>
+        </select>
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Number of Major Vessels</label>
+        <select id="ca" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Major Vessels (0–3)</option><option>0</option><option>1</option><option>2</option><option>3</option>
+        </select>
+      </div>
+      <div>
+          <label class="text-sm text-gray-600 mt-1 block">Thalassemia Test Result</label>
+        <select id="thal" class="input-focus border-2 border-gray-200 rounded-xl p-4 focus:border-blue-500 focus:outline-none w-full">
+          <option value="">Thalassemia</option><option value="1">Normal</option><option value="2">Fixed Defect</option><option value="3">Reversible Defect</option>
+        </select>
+      </div>
+      
+     
+      
+      
+    </div>
+    <div class="mt-8 text-center">
+      <button id="predict-btn" class="btn-gradient text-white px-10 py-4 rounded-xl shadow-lg font-semibold text-lg">
+        🔍 Analyze Heart Risk
+      </button>
+    </div>
+  </div>
+  
+  <!-- Upload Tab -->
+  <div id="upload-tab" class="hidden glass-card p-8 rounded-2xl card-shadow">
+    <label class="block text-gray-700 font-semibold mb-4 text-lg">📄 Upload Medical Report</label>
+    <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
+      <input id="ocr-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.docx" class="mb-4">
+      <p class="text-gray-500 mb-4">Drag & drop your medical report or click to browse</p>
+    </div>
+    <div class="flex space-x-4 mt-6">
+      <button id="ocr-btn" class="btn-gradient text-white px-8 py-3 rounded-xl shadow-lg font-semibold flex-1">
+        🔍 Scan & Predict
+      </button>
+      <button id="cancel-upload" class="bg-red-500 hover:bg-red-600 text-white px-8 py-3 rounded-xl shadow-lg font-semibold transition-all">
+        ❌ Cancel
+      </button>
+    </div>
+    <p class="text-sm text-gray-600 mt-4 text-center">Supports PDF, Word documents, and images. AI will extract values automatically.</p>
+  </div>
+
+  <!-- Animated Result -->
+  <div id="prediction-result" class="hidden mt-12 text-center result-card p-8 rounded-2xl shadow-xl fade-in">
+    <div class="text-6xl mb-4 pulse-heart">❤️</div>
+    <h3 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-6">
+      Your Heart Health Analysis
+    </h3>
+    <p id="risk-label" class="text-xl font-semibold mb-6 text-gray-800"></p>
+    <div class="progress-bar mx-auto w-full max-w-lg mb-6">
+      <div id="progress-fill" class="progress-fill"></div>
+    </div>
+    <p id="risk-status" class="text-lg text-gray-700 font-medium leading-relaxed mb-6"></p>
+    <button id="download-report-btn" class="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl shadow-lg font-semibold transition-all" onclick="downloadReport()">
+      📄 Download Report
+    </button>
+  </div>
+</section>
+
+
+    <!-- LOGIN -->
+    <section id="login-page" class="hidden max-w-md mx-auto space-y-8 fade-in">
+      <div class="text-center">
+        <div class="text-4xl mb-4">🔐</div>
+        <h2 class="text-3xl font-bold text-white">Welcome Back</h2>
+        <p class="text-white/80 mt-2">Sign in to access your health dashboard</p>
+      </div>
+      <div class="glass-card p-8 rounded-2xl card-shadow">
+        <div class="mb-4">
+            <label class="text-sm text-gray-600 mt-1 block">Your Email Address</label>
+          <input id="login-email" type="email" placeholder="Email Address" class="input-focus border-2 border-gray-200 rounded-xl p-4 w-full focus:border-blue-500 focus:outline-none">
+        </div>
+        <div class="mb-6">
+            <label class="text-sm text-gray-600 mt-1 block">Your Password</label>
+          <input id="login-password" type="password" placeholder="Password" class="input-focus border-2 border-gray-200 rounded-xl p-4 w-full focus:border-blue-500 focus:outline-none">
+        </div>
+        <button onclick="loginUser()" class="btn-gradient text-white px-6 py-4 rounded-xl font-semibold w-full text-lg">
+          🚀 Sign In
+        </button>
+        <p class="text-sm text-center text-gray-600 mt-6">
+          New to Heart Health? <a href="#" onclick="showPage('register')" class="text-blue-600 font-semibold hover:underline">Create Account</a>
+        </p>
+      </div>
+    </section>
+
+    <!-- REGISTER -->
+    <section id="register-page" class="hidden max-w-md mx-auto space-y-8 fade-in">
+      <div class="text-center">
+        <div class="text-4xl mb-4">✨</div>
+        <h2 class="text-3xl font-bold text-white">Join Our Community</h2>
+        <p class="text-white/80 mt-2">Start your heart health journey today</p>
+      </div>
+      <div class="glass-card p-8 rounded-2xl card-shadow">
+        <div class="mb-4">
+            <label class="text-sm text-gray-600 mt-1 block">Your Full Name</label>
+          <input id="reg-name" type="text" placeholder="Full Name" class="input-focus border-2 border-gray-200 rounded-xl p-4 w-full focus:border-blue-500 focus:outline-none">
+        </div>
+        <div class="mb-4">
+            <label class="text-sm text-gray-600 mt-1 block">Your Email Address</label>
+          <input id="reg-email" type="email" placeholder="Email Address" class="input-focus border-2 border-gray-200 rounded-xl p-4 w-full focus:border-blue-500 focus:outline-none">
+        </div>
+        <div class="mb-6">
+            <label class="text-sm text-gray-600 mt-1 block">Create a Strong Password</label>
+          <input id="reg-password" type="password" placeholder="Create Password" class="input-focus border-2 border-gray-200 rounded-xl p-4 w-full focus:border-blue-500 focus:outline-none">
+        </div>
+        <button onclick="registerUser()" class="btn-gradient text-white px-6 py-4 rounded-xl font-semibold w-full text-lg">
+          🎉 Create Account
+        </button>
+        <p class="text-sm text-center text-gray-600 mt-6">
+          Already a member? <a href="#" onclick="showPage('login')" class="text-blue-600 font-semibold hover:underline">Sign In</a>
+        </p>
+      </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section id="about-page" class="hidden space-y-8 fade-in">
+      <div class="text-center mb-12">
+        <div class="text-6xl mb-6 floating">🏥</div>
+        <h2 class="text-4xl font-bold text-white mb-4">About Heart Health Predictor</h2>
+        <p class="text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
+          Empowering individuals with AI-driven cardiovascular risk assessment
+        </p>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="glass-card p-8 rounded-2xl card-shadow">
+          <div class="text-3xl mb-4">🤖</div>
+          <h3 class="text-xl font-bold text-gray-800 mb-3">AI-Powered Analysis</h3>
+          <p class="text-gray-600 leading-relaxed">
+            Our advanced machine learning model analyzes multiple cardiovascular risk factors to provide accurate predictions based on clinical data.
+          </p>
+        </div>
+        
+        <div class="glass-card p-8 rounded-2xl card-shadow">
+          <div class="text-3xl mb-4">📊</div>
+          <h3 class="text-xl font-bold text-gray-800 mb-3">Comprehensive Assessment</h3>
+          <p class="text-gray-600 leading-relaxed">
+            Evaluate 13 key health parameters including blood pressure, cholesterol levels, and ECG results for a complete risk profile.
+          </p>
+        </div>
+        
+        <div class="glass-card p-8 rounded-2xl card-shadow">
+          <div class="text-3xl mb-4">📄</div>
+          <h3 class="text-xl font-bold text-gray-800 mb-3">Smart Document Scanning</h3>
+          <p class="text-gray-600 leading-relaxed">
+            Upload medical reports in PDF, Word, or image format. Our OCR technology automatically extracts relevant health data.
+          </p>
+        </div>
+        
+        <div class="glass-card p-8 rounded-2xl card-shadow">
+          <div class="text-3xl mb-4">🔒</div>
+          <h3 class="text-xl font-bold text-gray-800 mb-3">Privacy & Security</h3>
+          <p class="text-gray-600 leading-relaxed">
+            Your health data is processed securely with industry-standard encryption. We prioritize your privacy and data protection.
+          </p>
+        </div>
+      </div>
+      
+      <div class="glass-card p-8 rounded-2xl card-shadow text-center">
+        <h3 class="text-2xl font-bold text-gray-800 mb-4">⚠️ Important Disclaimer</h3>
+        <p class="text-gray-600 leading-relaxed">
+          This tool is for educational and informational purposes only. It should not replace professional medical advice, diagnosis, or treatment. Always consult with qualified healthcare providers for medical decisions.
+        </p>
+      </div>
+    </section>
+    <!-- RESULTS -->
+<section id="results-page" class="hidden space-y-8 fade-in">
+  <div class="text-center">
+    <div class="text-4xl mb-4 floating">📈</div>
+    <h2 class="text-3xl font-bold text-white mb-4">Your Health Dashboard</h2>
+    <p class="text-white/80">Track your cardiovascular risk assessments over time</p>
+  </div>
+  
+  <!-- Analytics Section -->
+  <div id="analytics-section" class="hidden space-y-6">
+    <h3 class="text-2xl font-bold text-white text-center mb-6 slide-in">✨ Health Analytics</h3>
+    
+    <!-- Animated Summary Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="glass-card p-6 rounded-xl text-center card-shadow hover:scale-105 transition-transform">
+        <div class="text-4xl mb-2">📅</div>
+        <div class="text-3xl font-bold text-blue-600 counter" id="total-tests" data-target="0">0</div>
+        <div class="text-sm text-gray-600 font-medium">Total Tests</div>
+      </div>
+      <div class="glass-card p-6 rounded-xl text-center card-shadow hover:scale-105 transition-transform">
+        <div class="text-4xl mb-2">📉</div>
+        <div class="text-3xl font-bold text-green-600 counter" id="avg-risk" data-target="0">0%</div>
+        <div class="text-sm text-gray-600 font-medium">Average Risk</div>
+      </div>
+      <div class="glass-card p-6 rounded-xl text-center card-shadow hover:scale-105 transition-transform">
+        <div class="text-4xl mb-2">🎯</div>
+        <div class="text-3xl font-bold text-purple-600" id="latest-risk">-</div>
+        <div class="text-sm text-gray-600 font-medium">Latest Risk</div>
+      </div>
+    </div>
+    
+    <!-- Risk Distribution Cards -->
+    <div class="glass-card p-6 rounded-2xl mb-6 card-shadow">
+      <h4 class="text-lg font-semibold text-gray-800 mb-6 text-center">📊 Risk Level Distribution</h4>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="risk-distribution">
+        <!-- Risk cards will be inserted here -->
+      </div>
+    </div>
+    
+    <!-- Trend Chart -->
+    <div class="glass-card p-6 rounded-2xl card-shadow">
+      <h4 class="text-lg font-semibold text-gray-800 mb-4 text-center">📈 Risk Trend Over Time</h4>
+      <div style="height: 300px;">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <div id="no-results" class="glass-card p-12 rounded-2xl text-center card-shadow">
+    <div class="text-6xl mb-4 floating">📊</div>
+    <h3 class="text-xl font-semibold text-gray-700 mb-2">No Predictions Yet</h3>
+    <p class="text-gray-600 mb-6">Start your first heart health assessment to see results here.</p>
+    <button onclick="showPage('predict')" class="btn-gradient text-white px-8 py-3 rounded-xl font-semibold">
+      🚀 Take Assessment
+    </button>
+  </div>
+  
+  <!-- Results History Section -->
+  <div id="history-section" class="hidden">
+    <h3 class="text-2xl font-bold text-white text-center mb-6">📋 Test History</h3>
+    <div id="results-container" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+  </div>
+</section>
+
+<!-- Test Details Modal -->
+<div id="test-details-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+  <div class="glass-card rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div class="p-6">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">📋 Test Details</h2>
+        <button onclick="closeTestDetails()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+      </div>
+      
+      <div id="test-details-content">
+        <!-- Content will be populated by JavaScript -->
+      </div>
+      
+      <div class="flex justify-end space-x-4 mt-6">
+        <button onclick="downloadTestReport()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-xl font-semibold">
+          📄 Download Report
+        </button>
+        <button onclick="closeTestDetails()" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-xl font-semibold">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  </main>
+     
+  <footer class="text-center text-white/70 py-8 mt-16">
+    <div class="glass-card max-w-4xl mx-auto p-6 rounded-2xl">
+      <div class="flex justify-center items-center space-x-2 mb-4">
+        <span class="text-2xl pulse-heart">❤️</span>
+        <span class="font-semibold text-gray-700">Heart Health Predictor</span>
+      </div>
+      <p class="text-gray-600 text-sm">
+        &copy; 2025 Heart Health Predictor • Empowering healthier lives through AI
+      </p>
+    </div>
+  </footer>
+
+
+  <script src="/static/app.js"></script>
+  <script src="/static/enhanced_functions.js"></script>
+  <script>feather.replace();</script>
+</body>
+</html>
