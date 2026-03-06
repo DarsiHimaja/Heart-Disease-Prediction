@@ -133,10 +133,6 @@ To deploy:
 
 Contributions are welcome! Please fork the repository and submit a pull request.
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
 ## Disclaimer
 
 This application is for educational and informational purposes only. It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for medical concerns.
