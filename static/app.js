@@ -479,7 +479,14 @@ document.getElementById("ocr-btn").addEventListener("click", async () => {
       
     } else {
       console.error('OCR Error:', data);
-      showFlash("❌ Failed to scan: " + (data.message || "Unknown error"), "error");
+      let errorMessage = data.message || "Unknown error";
+      
+      // Show specific error messages for deployment limitations
+      if (errorMessage.includes("not supported in this deployment")) {
+        showFlash("⚠️ " + errorMessage + " Try using a simple text file instead.", "error", 5000);
+      } else {
+        showFlash("❌ Failed to scan: " + errorMessage, "error");
+      }
     }
   } catch (error) {
     console.error('OCR Processing Error:', error);

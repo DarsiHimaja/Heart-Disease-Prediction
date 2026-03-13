@@ -279,6 +279,7 @@ def ocr():
                 content = f.read()
         elif file_ext == '.docx':
             try:
+                # Try to import and use python-docx
                 import docx
                 doc = docx.Document(filepath)
                 # Extract text from paragraphs and tables
@@ -294,9 +295,11 @@ def ocr():
                 
                 content = '\n'.join(paragraphs + table_text)
             except ImportError:
-                content = "DOCX file detected but python-docx not installed"
+                print("python-docx not available in this environment")
+                return jsonify({"ok": False, "message": "DOCX files not supported in this deployment environment. Please use TXT files."}), 400
             except Exception as e:
-                content = f"Error reading DOCX: {str(e)}"
+                print(f"Error reading DOCX: {e}")
+                return jsonify({"ok": False, "message": f"Error reading DOCX file: {str(e)}"}), 400
         elif file_ext == '.pdf':
             try:
                 import PyPDF2
@@ -304,9 +307,11 @@ def ocr():
                     reader = PyPDF2.PdfReader(f)
                     content = '\n'.join([page.extract_text() for page in reader.pages])
             except ImportError:
-                content = "PDF file detected but PyPDF2 not installed"
+                print("PyPDF2 not available in this environment")
+                return jsonify({"ok": False, "message": "PDF files not supported in this deployment environment. Please use TXT files."}), 400
             except Exception as e:
-                content = f"Error reading PDF: {str(e)}"
+                print(f"Error reading PDF: {e}")
+                return jsonify({"ok": False, "message": f"Error reading PDF file: {str(e)}"}), 400
         else:
             # Try as text file
             try:

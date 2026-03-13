@@ -1,0 +1,15 @@
+Patient Report
+
+Age: 55
+Gender: Male
+Blood Pressure: 150
+Cholesterol: 280
+Heart Rate: 170
+Chest Pain: Atypical
+Fasting Blood Sugar: Yes
+ECG: Normal
+Exercise Angina: No
+ST Depression: 2.0
+Slope: Flat
+Major Vessels: 2
+Thalassemia: Fixed
