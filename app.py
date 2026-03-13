@@ -209,11 +209,26 @@ def debug_file():
 @app.route("/ocr", methods=["POST"])
 def ocr():
     try:
+        print("=== OCR REQUEST RECEIVED ===")
+        print(f"Files in request: {list(request.files.keys())}")
+        print(f"Form data: {dict(request.form)}")
+        
         file = request.files.get('file')
         email = request.form.get('user_email')
         
-        if not file or not email:
-            return jsonify({"ok": False, "message": "File and email required"}), 400
+        print(f"File: {file}")
+        print(f"Email: {email}")
+        
+        if not file:
+            print("❌ No file provided")
+            return jsonify({"ok": False, "message": "No file provided"}), 400
+            
+        if not email:
+            print("❌ No email provided")
+            return jsonify({"ok": False, "message": "No email provided"}), 400
+        
+        print(f"File name: {file.filename}")
+        print(f"File content type: {file.content_type}")
         
         # Save file temporarily to read properly
         filename = f"temp_{email}_{file.filename}"
@@ -221,9 +236,13 @@ def ocr():
         os.makedirs("uploads", exist_ok=True)
         file.save(filepath)
         
+        print(f"File saved to: {filepath}")
+        
         # Read file based on extension
         file_ext = os.path.splitext(file.filename)[1].lower()
         content = ""
+        
+        print(f"File extension: {file_ext}")
         
         if file_ext == '.txt':
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -256,14 +275,20 @@ def ocr():
                     content = '\n'.join([page.extract_text() for page in reader.pages])
             except ImportError:
                 content = "PDF file detected but PyPDF2 not installed"
+            except Exception as e:
+                content = f"Error reading PDF: {str(e)}"
         else:
             # Try as text file
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
+            try:
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+            except Exception as e:
+                print(f"Error reading file as text: {e}")
+                content = ""
         
         print(f"=== FILE: {file.filename} ({file_ext}) ===")
         print(f"Content length: {len(content)}")
-        print(f"First 500 chars: {content[:500]}")
+        print(f"First 500 chars: {repr(content[:500])}")
         print(f"=== END CONTENT ===")
         
         # Clean up temp file
@@ -274,6 +299,7 @@ def ocr():
         
         # Extract data from content
         if not content.strip():
+            print("❌ File content is empty")
             return jsonify({"ok": False, "message": "Could not read file content. Please ensure it's a text file, PDF, or Word document."}), 400
             
         extracted_data = parse_medical_text(content)
@@ -323,9 +349,13 @@ def ocr():
                 "result": {"risk_level": risk, "prediction_result": pred}
             })
         else:
+            print("❌ No medical data extracted from file")
             return jsonify({"ok": False, "message": "No medical data found in file. Please check file format."}), 400
             
     except Exception as e:
+        print(f"❌ OCR processing error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"ok": False, "message": f"OCR processing failed: {str(e)}"}), 500
 
 # ---------- Parse Medical Text ----------
@@ -339,121 +369,256 @@ def parse_medical_text(text):
         extracted = {}
         found_count = 0
         
-        # Extract Age
-        age_match = re.search(r'Age\s*:\s*(\d+)', text, re.IGNORECASE)
-        if age_match:
-            extracted["age"] = int(age_match.group(1))
-            found_count += 1
-            print(f"✓ Age found: {extracted['age']}")
+        # More flexible patterns for extraction
         
-        # Extract Gender
-        gender_match = re.search(r'Gender\s*:\s*(\w+)', text, re.IGNORECASE)
-        if gender_match:
-            gender = gender_match.group(1).lower()
-            extracted["sex"] = 0 if 'female' in gender else 1
-            found_count += 1
-            print(f"✓ Gender found: {gender} -> {extracted['sex']}")
+        # Extract Age - multiple patterns
+        age_patterns = [
+            r'Age\s*[:\-]?\s*(\d+)',
+            r'age\s*[:\-]?\s*(\d+)',
+            r'AGE\s*[:\-]?\s*(\d+)',
+            r'(\d+)\s*years?\s*old',
+            r'Patient.*?(\d+).*?years?'
+        ]
         
-        # Extract Blood Pressure
-        bp_match = re.search(r'Resting Blood Pressure.*?:\s*(\d+)', text, re.IGNORECASE)
-        if bp_match:
-            extracted["trestbps"] = int(bp_match.group(1))
-            found_count += 1
-            print(f"✓ BP found: {extracted['trestbps']}")
+        for pattern in age_patterns:
+            age_match = re.search(pattern, text, re.IGNORECASE)
+            if age_match:
+                age_val = int(age_match.group(1))
+                if 18 <= age_val <= 120:  # Reasonable age range
+                    extracted["age"] = age_val
+                    found_count += 1
+                    print(f"✓ Age found: {extracted['age']}")
+                    break
         
-        # Extract Cholesterol
-        chol_match = re.search(r'Cholesterol.*?:\s*(\d+)', text, re.IGNORECASE)
-        if chol_match:
-            extracted["chol"] = int(chol_match.group(1))
-            found_count += 1
-            print(f"✓ Cholesterol found: {extracted['chol']}")
+        # Extract Gender - multiple patterns
+        gender_patterns = [
+            r'Gender\s*[:\-]?\s*(\w+)',
+            r'Sex\s*[:\-]?\s*(\w+)',
+            r'gender\s*[:\-]?\s*(\w+)',
+            r'sex\s*[:\-]?\s*(\w+)',
+            r'(male|female|M|F)\b'
+        ]
         
-        # Extract Heart Rate
-        hr_match = re.search(r'Max Heart Rate\s*:\s*(\d+)', text, re.IGNORECASE)
-        if hr_match:
-            extracted["thalach"] = int(hr_match.group(1))
-            found_count += 1
-            print(f"✓ Heart Rate found: {extracted['thalach']}")
+        for pattern in gender_patterns:
+            gender_match = re.search(pattern, text, re.IGNORECASE)
+            if gender_match:
+                gender = gender_match.group(1).lower()
+                if 'female' in gender or gender == 'f':
+                    extracted["sex"] = 0
+                elif 'male' in gender or gender == 'm':
+                    extracted["sex"] = 1
+                
+                if "sex" in extracted:
+                    found_count += 1
+                    print(f"✓ Gender found: {gender} -> {extracted['sex']}")
+                    break
         
-        # Extract Chest Pain Type
-        cp_match = re.search(r'Chest Pain Type\s*:\s*([^\n]+)', text, re.IGNORECASE)
-        if cp_match:
-            cp_type = cp_match.group(1).strip().lower()
-            if 'typical angina' in cp_type:
-                extracted["cp"] = 0
-            elif 'atypical' in cp_type:
-                extracted["cp"] = 1
-            elif 'non-anginal' in cp_type:
-                extracted["cp"] = 2
-            elif 'asymptomatic' in cp_type:
-                extracted["cp"] = 3
-            if "cp" in extracted:
-                found_count += 1
-                print(f"✓ Chest Pain found: {cp_type} -> {extracted['cp']}")
+        # Extract Blood Pressure - multiple patterns
+        bp_patterns = [
+            r'(?:Resting\s+)?Blood\s+Pressure\s*[:\-]?\s*(\d+)',
+            r'BP\s*[:\-]?\s*(\d+)',
+            r'Systolic\s*[:\-]?\s*(\d+)',
+            r'(\d+)\s*mmHg',
+            r'(\d+)/(\d+)\s*mmHg'  # Handle BP like 120/80
+        ]
         
-        # Extract Fasting Blood Sugar
-        fbs_match = re.search(r'Fasting Blood Sugar.*?:\s*(\w+)', text, re.IGNORECASE)
-        if fbs_match:
-            fbs_val = fbs_match.group(1).lower()
-            extracted["fbs"] = 1 if 'yes' in fbs_val else 0
-            found_count += 1
-            print(f"✓ FBS found: {fbs_val} -> {extracted['fbs']}")
+        for pattern in bp_patterns:
+            bp_match = re.search(pattern, text, re.IGNORECASE)
+            if bp_match:
+                bp_val = int(bp_match.group(1))
+                if 80 <= bp_val <= 250:  # Reasonable BP range
+                    extracted["trestbps"] = bp_val
+                    found_count += 1
+                    print(f"✓ BP found: {extracted['trestbps']}")
+                    break
         
-        # Extract ECG
-        ecg_match = re.search(r'Rest ECG\s*:\s*([^\n]+)', text, re.IGNORECASE)
-        if ecg_match:
-            ecg_val = ecg_match.group(1).strip().lower()
-            if 'normal' in ecg_val:
-                extracted["restecg"] = 0
-            elif 'abnormality' in ecg_val or 'st-t' in ecg_val:
-                extracted["restecg"] = 1
-            elif 'lvh' in ecg_val:
-                extracted["restecg"] = 2
-            if "restecg" in extracted:
-                found_count += 1
-                print(f"✓ ECG found: {ecg_val} -> {extracted['restecg']}")
+        # Extract Cholesterol - multiple patterns
+        chol_patterns = [
+            r'Cholesterol\s*[:\-]?\s*(\d+)',
+            r'cholesterol\s*[:\-]?\s*(\d+)',
+            r'CHOL\s*[:\-]?\s*(\d+)',
+            r'Total\s+Cholesterol\s*[:\-]?\s*(\d+)'
+        ]
         
-        # Extract Exercise Induced Angina
-        angina_match = re.search(r'Exercise Induced Angina\s*:\s*(\w+)', text, re.IGNORECASE)
-        if angina_match:
-            angina_val = angina_match.group(1).lower()
-            extracted["exang"] = 1 if 'yes' in angina_val else 0
-            found_count += 1
-            print(f"✓ Exercise Angina found: {angina_val} -> {extracted['exang']}")
+        for pattern in chol_patterns:
+            chol_match = re.search(pattern, text, re.IGNORECASE)
+            if chol_match:
+                chol_val = int(chol_match.group(1))
+                if 100 <= chol_val <= 600:  # Reasonable cholesterol range
+                    extracted["chol"] = chol_val
+                    found_count += 1
+                    print(f"✓ Cholesterol found: {extracted['chol']}")
+                    break
         
-        # Extract ST Depression
-        oldpeak_match = re.search(r'ST Depression.*?:\s*([\d.]+)', text, re.IGNORECASE)
-        if oldpeak_match:
-            extracted["oldpeak"] = float(oldpeak_match.group(1))
-            found_count += 1
-            print(f"✓ ST Depression found: {extracted['oldpeak']}")
+        # Extract Heart Rate - multiple patterns
+        hr_patterns = [
+            r'(?:Max\s+)?Heart\s+Rate\s*[:\-]?\s*(\d+)',
+            r'Maximum\s+Heart\s+Rate\s*[:\-]?\s*(\d+)',
+            r'HR\s*[:\-]?\s*(\d+)',
+            r'(\d+)\s*bpm'
+        ]
         
-        # Extract Slope
-        slope_match = re.search(r'Slope.*?:\s*([^\n]+)', text, re.IGNORECASE)
-        if slope_match:
-            slope_val = slope_match.group(1).strip().lower()
-            if 'upsloping' in slope_val:
-                extracted["slope"] = 0
-            elif 'flat' in slope_val:
-                extracted["slope"] = 1
-            elif 'downsloping' in slope_val:
-                extracted["slope"] = 2
-            if "slope" in extracted:
-                found_count += 1
-                print(f"✓ Slope found: {slope_val} -> {extracted['slope']}")
+        for pattern in hr_patterns:
+            hr_match = re.search(pattern, text, re.IGNORECASE)
+            if hr_match:
+                hr_val = int(hr_match.group(1))
+                if 60 <= hr_val <= 220:  # Reasonable heart rate range
+                    extracted["thalach"] = hr_val
+                    found_count += 1
+                    print(f"✓ Heart Rate found: {extracted['thalach']}")
+                    break
         
-        # Extract Number of Vessels
-        vessel_match = re.search(r'Number of Major Vessels.*?:\s*(\d+)', text, re.IGNORECASE)
-        if vessel_match:
-            extracted["ca"] = int(vessel_match.group(1))
-            found_count += 1
-            print(f"✓ Vessels found: {extracted['ca']}")
+        # Extract Chest Pain Type - multiple patterns
+        cp_patterns = [
+            r'Chest\s+Pain\s+Type\s*[:\-]?\s*([^\n\r]+)',
+            r'chest\s+pain\s*[:\-]?\s*([^\n\r]+)',
+            r'CP\s*[:\-]?\s*([^\n\r]+)'
+        ]
         
-        # Extract Thalassemia - handle various formats including truncated text
+        for pattern in cp_patterns:
+            cp_match = re.search(pattern, text, re.IGNORECASE)
+            if cp_match:
+                cp_type = cp_match.group(1).strip().lower()
+                if 'typical' in cp_type and 'angina' in cp_type:
+                    extracted["cp"] = 0
+                elif 'atypical' in cp_type:
+                    extracted["cp"] = 1
+                elif 'non-anginal' in cp_type or 'non anginal' in cp_type:
+                    extracted["cp"] = 2
+                elif 'asymptomatic' in cp_type:
+                    extracted["cp"] = 3
+                
+                if "cp" in extracted:
+                    found_count += 1
+                    print(f"✓ Chest Pain found: {cp_type} -> {extracted['cp']}")
+                    break
+        
+        # Extract Fasting Blood Sugar - multiple patterns
+        fbs_patterns = [
+            r'Fasting\s+Blood\s+Sugar\s*[:\-]?\s*(\w+)',
+            r'FBS\s*[:\-]?\s*(\w+)',
+            r'fasting\s+glucose\s*[:\-]?\s*(\w+)'
+        ]
+        
+        for pattern in fbs_patterns:
+            fbs_match = re.search(pattern, text, re.IGNORECASE)
+            if fbs_match:
+                fbs_val = fbs_match.group(1).lower()
+                if 'yes' in fbs_val or 'positive' in fbs_val or 'high' in fbs_val:
+                    extracted["fbs"] = 1
+                elif 'no' in fbs_val or 'negative' in fbs_val or 'normal' in fbs_val:
+                    extracted["fbs"] = 0
+                
+                if "fbs" in extracted:
+                    found_count += 1
+                    print(f"✓ FBS found: {fbs_val} -> {extracted['fbs']}")
+                    break
+        
+        # Extract ECG - multiple patterns
+        ecg_patterns = [
+            r'(?:Rest\s+)?ECG\s*[:\-]?\s*([^\n\r]+)',
+            r'(?:Resting\s+)?EKG\s*[:\-]?\s*([^\n\r]+)',
+            r'electrocardiogram\s*[:\-]?\s*([^\n\r]+)'
+        ]
+        
+        for pattern in ecg_patterns:
+            ecg_match = re.search(pattern, text, re.IGNORECASE)
+            if ecg_match:
+                ecg_val = ecg_match.group(1).strip().lower()
+                if 'normal' in ecg_val:
+                    extracted["restecg"] = 0
+                elif 'abnormal' in ecg_val or 'st-t' in ecg_val:
+                    extracted["restecg"] = 1
+                elif 'lvh' in ecg_val or 'hypertrophy' in ecg_val:
+                    extracted["restecg"] = 2
+                
+                if "restecg" in extracted:
+                    found_count += 1
+                    print(f"✓ ECG found: {ecg_val} -> {extracted['restecg']}")
+                    break
+        
+        # Extract Exercise Induced Angina - multiple patterns
+        angina_patterns = [
+            r'Exercise\s+Induced\s+Angina\s*[:\-]?\s*(\w+)',
+            r'exercise\s+angina\s*[:\-]?\s*(\w+)',
+            r'angina\s+on\s+exercise\s*[:\-]?\s*(\w+)'
+        ]
+        
+        for pattern in angina_patterns:
+            angina_match = re.search(pattern, text, re.IGNORECASE)
+            if angina_match:
+                angina_val = angina_match.group(1).lower()
+                if 'yes' in angina_val or 'positive' in angina_val:
+                    extracted["exang"] = 1
+                elif 'no' in angina_val or 'negative' in angina_val:
+                    extracted["exang"] = 0
+                
+                if "exang" in extracted:
+                    found_count += 1
+                    print(f"✓ Exercise Angina found: {angina_val} -> {extracted['exang']}")
+                    break
+        
+        # Extract ST Depression - multiple patterns
+        oldpeak_patterns = [
+            r'ST\s+Depression\s*[:\-]?\s*([\d.]+)',
+            r'oldpeak\s*[:\-]?\s*([\d.]+)',
+            r'ST\s+segment\s+depression\s*[:\-]?\s*([\d.]+)'
+        ]
+        
+        for pattern in oldpeak_patterns:
+            oldpeak_match = re.search(pattern, text, re.IGNORECASE)
+            if oldpeak_match:
+                oldpeak_val = float(oldpeak_match.group(1))
+                if 0 <= oldpeak_val <= 10:  # Reasonable range
+                    extracted["oldpeak"] = oldpeak_val
+                    found_count += 1
+                    print(f"✓ ST Depression found: {extracted['oldpeak']}")
+                    break
+        
+        # Extract Slope - multiple patterns
+        slope_patterns = [
+            r'Slope\s*[:\-]?\s*([^\n\r]+)',
+            r'ST\s+slope\s*[:\-]?\s*([^\n\r]+)'
+        ]
+        
+        for pattern in slope_patterns:
+            slope_match = re.search(pattern, text, re.IGNORECASE)
+            if slope_match:
+                slope_val = slope_match.group(1).strip().lower()
+                if 'upsloping' in slope_val or 'up' in slope_val:
+                    extracted["slope"] = 0
+                elif 'flat' in slope_val:
+                    extracted["slope"] = 1
+                elif 'downsloping' in slope_val or 'down' in slope_val:
+                    extracted["slope"] = 2
+                
+                if "slope" in extracted:
+                    found_count += 1
+                    print(f"✓ Slope found: {slope_val} -> {extracted['slope']}")
+                    break
+        
+        # Extract Number of Vessels - multiple patterns
+        vessel_patterns = [
+            r'(?:Number\s+of\s+)?Major\s+Vessels\s*[:\-]?\s*(\d+)',
+            r'vessels\s*[:\-]?\s*(\d+)',
+            r'CA\s*[:\-]?\s*(\d+)'
+        ]
+        
+        for pattern in vessel_patterns:
+            vessel_match = re.search(pattern, text, re.IGNORECASE)
+            if vessel_match:
+                vessel_val = int(vessel_match.group(1))
+                if 0 <= vessel_val <= 4:  # Valid range
+                    extracted["ca"] = vessel_val
+                    found_count += 1
+                    print(f"✓ Vessels found: {extracted['ca']}")
+                    break
+        
+        # Extract Thalassemia - multiple patterns
         thal_patterns = [
-            r'Thalassemia\s*:\s*([^\n]+)',
-            r'Thal\s*:\s*([^\n]+)',
-            r'Thalassemia\s+([^\n]+)'
+            r'Thalassemia\s*[:\-]?\s*([^\n\r]+)',
+            r'Thal\s*[:\-]?\s*([^\n\r]+)',
+            r'thalassemia\s*[:\-]?\s*([^\n\r]+)'
         ]
         
         for pattern in thal_patterns:
@@ -464,22 +629,20 @@ def parse_medical_text(text):
                 
                 if 'normal' in thal_val:
                     extracted["thal"] = 1
-                elif 'fixed defect' in thal_val or 'fixed defec' in thal_val or 'fixed' in thal_val:
+                elif 'fixed' in thal_val:
                     extracted["thal"] = 2
-                elif 'reversible defect' in thal_val or 'reversible' in thal_val:
+                elif 'reversible' in thal_val:
                     extracted["thal"] = 3
                 
                 if "thal" in extracted:
                     found_count += 1
                     print(f"✓ Thalassemia found: {thal_val} -> {extracted['thal']}")
                     break
-                else:
-                    print(f"⚠️ Thalassemia text found but not recognized: '{thal_val}'")
         
         print(f"=== EXTRACTION COMPLETE ===")
         print(f"Found {found_count} values: {extracted}")
         
-        # Only return if we found at least some values
+        # Return if we found at least some values
         if found_count > 0:
             return extracted
         else:

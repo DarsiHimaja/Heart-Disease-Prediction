@@ -1,0 +1,21 @@
+MEDICAL REPORT - CARDIOVASCULAR ASSESSMENT
+
+Patient: John Doe
+Age: 52
+Gender: Male
+
+CLINICAL FINDINGS:
+- Blood Pressure: 145 mmHg
+- Cholesterol: 280 mg/dL
+- Heart Rate: 165 bpm
+- Chest Pain: Typical Angina
+- Fasting Blood Sugar: Yes
+- ECG: Normal
+- Exercise Angina: No
+- ST Depression: 2.1
+- Slope: Upsloping
+- Major Vessels: 2
+- Thalassemia: Normal
+
+ASSESSMENT: Moderate cardiovascular risk factors present.
+RECOMMENDATION: Follow-up in 3 months.

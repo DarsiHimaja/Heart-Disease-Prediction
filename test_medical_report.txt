@@ -1,0 +1,20 @@
+Medical Report
+
+Patient Information:
+Age: 45
+Gender: Male
+
+Cardiovascular Assessment:
+Chest Pain Type: Typical Angina
+Resting Blood Pressure: 140
+Cholesterol: 250
+Fasting Blood Sugar: Yes
+Rest ECG: Normal
+Max Heart Rate: 160
+Exercise Induced Angina: No
+ST Depression: 1.5
+Slope: Upsloping
+Number of Major Vessels: 1
+Thalassemia: Normal
+
+Assessment completed on: 2024-01-15

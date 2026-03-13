@@ -47,27 +47,6 @@ function getThalType(thal) {
 function generateAvailableParametersForPDF(data) {
   let html = '';
   
-  // Display all parameters with their exact values and descriptions
-  html += `<p><strong>Age:</strong> ${data.age || 0}</p>`;
-  html += `<p><strong>Sex:</strong> ${data.sex !== undefined ? data.sex : 0} (${data.sex === 0 ? 'Female' : data.sex === 1 ? 'Male' : 'Unknown'})</p>`;
-  html += `<p><strong>Chest Pain (cp):</strong> ${data.cp !== undefined ? data.cp : 0} (${getChestPainType(data.cp)})</p>`;
-  html += `<p><strong>Resting Blood Pressure (trestbps):</strong> ${data.trestbps || 0} mmHg</p>`;
-  html += `<p><strong>Cholesterol (chol):</strong> ${data.chol || 0} mg/dL</p>`;
-  html += `<p><strong>Fasting Blood Sugar (fbs):</strong> ${data.fbs !== undefined ? data.fbs : 0} (${data.fbs === 1 ? 'Yes' : 'No'})</p>`;
-  html += `<p><strong>Resting ECG (restecg):</strong> ${data.restecg !== undefined ? data.restecg : 0} (${getECGType(data.restecg)})</p>`;
-  html += `<p><strong>Max Heart Rate (thalach):</strong> ${data.thalach || 0} bpm</p>`;
-  html += `<p><strong>Exercise Induced Angina (exang):</strong> ${data.exang !== undefined ? data.exang : 0} (${data.exang === 1 ? 'Yes' : 'No'})</p>`;
-  html += `<p><strong>ST Depression (oldpeak):</strong> ${data.oldpeak !== undefined ? data.oldpeak : 0}</p>`;
-  html += `<p><strong>ST Slope (slope):</strong> ${data.slope !== undefined ? data.slope : 0} (${getSlopeType(data.slope)})</p>`;
-  html += `<p><strong>Major Vessels (ca):</strong> ${data.ca !== undefined ? data.ca : 0}</p>`;
-  html += `<p><strong>Thalassemia (thal):</strong> ${data.thal !== undefined ? data.thal : 0} (${getThalType(data.thal)})</p>`;
-  
-  return html;
-}
-
-function generateAvailableParametersForPDF(data) {
-  let html = '';
-  
   if (data.age !== undefined && data.age !== null && data.age !== '') {
     html += `<p><strong>Age:</strong> ${data.age}</p>`;
   }

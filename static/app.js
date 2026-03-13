@@ -342,6 +342,8 @@ document.getElementById("predict-btn").addEventListener("click", async () => {
 // -------- OCR Upload Prediction --------
 document.getElementById("ocr-btn").addEventListener("click", async () => {
   const email = localStorage.getItem("userEmail");
+  console.log('OCR button clicked. Email:', email);
+  
   if (!email) {
     showFlash("🔐 Please login first to upload files.", "error");
     setTimeout(() => showPage("login"), 1200);
@@ -349,7 +351,12 @@ document.getElementById("ocr-btn").addEventListener("click", async () => {
   }
 
   const file = document.getElementById("ocr-file").files[0];
-  if (!file) return showFlash("📁 Please select a file first!", "error");
+  console.log('Selected file:', file);
+  
+  if (!file) {
+    showFlash("📁 Please select a file first!", "error");
+    return;
+  }
 
   // Show loading state
   const ocrBtn = document.getElementById("ocr-btn");
@@ -361,9 +368,23 @@ document.getElementById("ocr-btn").addEventListener("click", async () => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("user_email", email);
+    
+    console.log('FormData contents:');
+    for (let [key, value] of formData.entries()) {
+      console.log(key, value);
+    }
 
-    const res = await fetch(`${API_URL}/ocr`, { method: "POST", body: formData });
+    console.log('Sending OCR request to:', `${API_URL}/ocr`);
+    const res = await fetch(`${API_URL}/ocr`, { 
+      method: "POST", 
+      body: formData 
+    });
+    
+    console.log('Response status:', res.status);
+    console.log('Response headers:', res.headers);
+    
     const data = await res.json();
+    console.log('Response data:', data);
 
     if (data.ok && data.result) {
       // Fill form fields with extracted data
