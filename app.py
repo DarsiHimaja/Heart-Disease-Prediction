@@ -235,7 +235,7 @@ def debug_file():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-# ---------- OCR Implementation - Full Support ----------
+# ---------- OCR Implementation - Vercel Compatible ----------
 @app.route("/ocr", methods=["POST"])
 def ocr():
     try:
@@ -248,141 +248,89 @@ def ocr():
         file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else '.txt'
         content = ""
         
-        print(f"Processing {file_ext} file: {file.filename}")
-        
-        # Read file content based on type
-        try:
-            if file_ext == '.txt':
-                content = file.read().decode('utf-8', errors='ignore')
-                print(f"TXT content length: {len(content)}")
+        # Read file content with fallbacks
+        if file_ext == '.txt':
+            content = file.read().decode('utf-8', errors='ignore')
+            
+        elif file_ext in ['.docx', '.doc']:
+            # Try DOCX processing with fallback
+            try:
+                # Dynamic import to avoid deployment issues
+                docx = __import__('docx')
+                from io import BytesIO
                 
-            elif file_ext in ['.docx', '.doc']:
+                doc = docx.Document(BytesIO(file.read()))
+                paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+                
+                # Try to get table content
+                table_texts = []
                 try:
-                    import docx
-                    from io import BytesIO
-                    
-                    # Read DOCX from memory
-                    file_bytes = file.read()
-                    doc = docx.Document(BytesIO(file_bytes))
-                    
-                    # Extract text from paragraphs
-                    paragraphs = []
-                    for paragraph in doc.paragraphs:
-                        if paragraph.text.strip():
-                            paragraphs.append(paragraph.text.strip())
-                    
-                    # Extract text from tables
-                    table_texts = []
                     for table in doc.tables:
                         for row in table.rows:
                             for cell in row.cells:
                                 if cell.text.strip():
                                     table_texts.append(cell.text.strip())
-                    
-                    # Combine all text
-                    all_text = paragraphs + table_texts
-                    content = '\n'.join(all_text)
-                    print(f"DOCX content extracted: {len(content)} characters")
-                    
-                except ImportError:
-                    return jsonify({"ok": False, "message": "DOCX processing library not available. Please try with a TXT file."}), 400
-                except Exception as docx_error:
-                    print(f"DOCX error: {docx_error}")
-                    return jsonify({"ok": False, "message": f"Error reading DOCX file: {str(docx_error)}"}), 400
-                    
-            elif file_ext == '.pdf':
-                try:
-                    import PyPDF2
-                    from io import BytesIO
-                    
-                    # Read PDF from memory
-                    file_bytes = file.read()
-                    pdf_reader = PyPDF2.PdfReader(BytesIO(file_bytes))
-                    
-                    # Extract text from all pages
-                    pdf_texts = []
-                    for page_num, page in enumerate(pdf_reader.pages):
-                        try:
-                            page_text = page.extract_text()
-                            if page_text.strip():
-                                pdf_texts.append(page_text)
-                        except Exception as page_error:
-                            print(f"Error reading page {page_num}: {page_error}")
-                            continue
-                    
-                    content = '\n'.join(pdf_texts)
-                    print(f"PDF content extracted: {len(content)} characters from {len(pdf_texts)} pages")
-                    
-                except ImportError:
-                    return jsonify({"ok": False, "message": "PDF processing library not available. Please try with a TXT file."}), 400
-                except Exception as pdf_error:
-                    print(f"PDF error: {pdf_error}")
-                    return jsonify({"ok": False, "message": f"Error reading PDF file: {str(pdf_error)}"}), 400
-            else:
-                # Try as text file for unknown extensions
-                content = file.read().decode('utf-8', errors='ignore')
-                print(f"Unknown file type, treated as text: {len(content)} characters")
+                except:
+                    pass  # Skip tables if error
                 
-        except Exception as read_error:
-            print(f"File reading error: {read_error}")
-            return jsonify({"ok": False, "message": f"Error reading file: {str(read_error)}"}), 400
+                content = '\n'.join(paragraphs + table_texts)
+                
+            except ImportError:
+                return jsonify({"ok": False, "message": "DOCX processing not available. Please convert to TXT format."}), 400
+            except Exception as e:
+                return jsonify({"ok": False, "message": f"Error reading DOCX: Please try TXT format instead."}), 400
+                
+        elif file_ext == '.pdf':
+            # Try PDF processing with fallback
+            try:
+                # Dynamic import to avoid deployment issues
+                PyPDF2 = __import__('PyPDF2')
+                from io import BytesIO
+                
+                pdf_reader = PyPDF2.PdfReader(BytesIO(file.read()))
+                pdf_texts = []
+                
+                for page in pdf_reader.pages:
+                    try:
+                        page_text = page.extract_text()
+                        if page_text.strip():
+                            pdf_texts.append(page_text)
+                    except:
+                        continue  # Skip problematic pages
+                
+                content = '\n'.join(pdf_texts)
+                
+            except ImportError:
+                return jsonify({"ok": False, "message": "PDF processing not available. Please convert to TXT format."}), 400
+            except Exception as e:
+                return jsonify({"ok": False, "message": f"Error reading PDF: Please try TXT format instead."}), 400
+        else:
+            # Try as text file
+            content = file.read().decode('utf-8', errors='ignore')
         
-        # Check if content was extracted
         if not content or not content.strip():
-            return jsonify({
-                "ok": False, 
-                "message": f"No readable content found in {file_ext} file. Please check if the file contains text."
-            }), 400
+            return jsonify({"ok": False, "message": "No readable content found in file."}), 400
         
-        print(f"Content preview: {content[:200]}...")
-        
-        # Parse medical data from content
-        try:
-            extracted_data = parse_medical_text(content)
-        except Exception as parse_error:
-            print(f"Parsing error: {parse_error}")
-            return jsonify({
-                "ok": False, 
-                "message": f"Error parsing medical data: {str(parse_error)}"
-            }), 500
+        # Parse medical data
+        extracted_data = parse_medical_text(content)
         
         if not extracted_data:
             return jsonify({
                 "ok": False, 
-                "message": "No medical data found in file. Please ensure your file contains medical parameters like:\n• Age: 45\n• Gender: Male\n• Blood Pressure: 140\n• Cholesterol: 250\nEtc.",
-                "file_preview": content[:300] + "..." if len(content) > 300 else content
+                "message": "No medical data found. Please ensure your file contains:\n• Age: 45\n• Gender: Male\n• Blood Pressure: 140\n• Cholesterol: 250\nEtc.",
+                "preview": content[:200] + "..." if len(content) > 200 else content
             }), 400
         
-        print(f"Extracted medical data: {extracted_data}")
+        # Make prediction
+        defaults = {"age": 50, "sex": 1, "cp": 0, "trestbps": 120, "chol": 200, "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0, "oldpeak": 1.0, "slope": 1, "ca": 0, "thal": 1}
+        prediction_values = [extracted_data.get(field, defaults[field]) for field in ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]]
         
-        # Prepare prediction data
-        defaults = {
-            "age": 50, "sex": 1, "cp": 0, "trestbps": 120, "chol": 200,
-            "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0,
-            "oldpeak": 1.0, "slope": 1, "ca": 0, "thal": 1
-        }
+        arr = np.array([prediction_values])
+        arr = scaler.transform(arr)
+        pred = model.predict_proba(arr)[0][1] * 100
+        risk = "Low" if pred < 35 else "Moderate" if pred < 65 else "High"
         
-        # Create prediction array
-        prediction_values = []
-        for field in ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]:
-            value = extracted_data.get(field, defaults[field])
-            prediction_values.append(value)
-        
-        print(f"Prediction values: {prediction_values}")
-        
-        # Make ML prediction
-        try:
-            arr = np.array([prediction_values])
-            arr = scaler.transform(arr)
-            pred = model.predict_proba(arr)[0][1] * 100
-            risk = "Low" if pred < 35 else "Moderate" if pred < 65 else "High"
-            
-            print(f"Prediction: {risk} ({pred:.1f}%)")
-        except Exception as ml_error:
-            print(f"ML prediction error: {ml_error}")
-            return jsonify({"ok": False, "message": f"Error making prediction: {str(ml_error)}"}), 500
-        
-        # Save to database
+        # Save to database (with error handling)
         try:
             conn = sqlite3.connect("heart.db")
             c = conn.cursor()
@@ -391,22 +339,17 @@ def ocr():
                       (email, risk, pred, *prediction_values))
             conn.commit()
             conn.close()
-        except Exception as db_error:
-            print(f"Database error: {db_error}")
-            # Continue even if database save fails
+        except:
+            pass  # Continue even if database fails
         
         return jsonify({
             "ok": True,
             "extracted": extracted_data,
-            "file_content": content[:500],
             "result": {"risk_level": risk, "prediction_result": pred}
         })
         
     except Exception as e:
-        print(f"OCR processing error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"ok": False, "message": f"Unexpected error: {str(e)}"}), 500
+        return jsonify({"ok": False, "message": f"Processing error: {str(e)}"}), 500
 
 # ---------- Parse Medical Text ----------
 def parse_medical_text(text):
