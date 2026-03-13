@@ -260,138 +260,105 @@ def ocr():
         print(f"File name: {file.filename}")
         print(f"File content type: {file.content_type}")
         
-        # Save file temporarily to read properly
-        filename = f"temp_{email}_{file.filename}"
-        filepath = os.path.join("uploads", filename)
-        os.makedirs("uploads", exist_ok=True)
-        file.save(filepath)
-        
-        print(f"File saved to: {filepath}")
-        
-        # Read file based on extension
-        file_ext = os.path.splitext(file.filename)[1].lower()
+        # For serverless, try to read file directly without saving to disk
+        file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else '.txt'
         content = ""
         
         print(f"File extension: {file_ext}")
         
-        if file_ext == '.txt':
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-        elif file_ext == '.docx':
-            try:
-                # Try to import and use python-docx
-                import docx
-                doc = docx.Document(filepath)
-                # Extract text from paragraphs and tables
-                paragraphs = [paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()]
-                
-                # Also extract from tables if any
-                table_text = []
-                for table in doc.tables:
-                    for row in table.rows:
-                        for cell in row.cells:
-                            if cell.text.strip():
-                                table_text.append(cell.text.strip())
-                
-                content = '\n'.join(paragraphs + table_text)
-            except ImportError:
-                print("python-docx not available in this environment")
-                return jsonify({"ok": False, "message": "DOCX files not supported in this deployment environment. Please use TXT files."}), 400
-            except Exception as e:
-                print(f"Error reading DOCX: {e}")
-                return jsonify({"ok": False, "message": f"Error reading DOCX file: {str(e)}"}), 400
-        elif file_ext == '.pdf':
-            try:
-                import PyPDF2
-                with open(filepath, 'rb') as f:
-                    reader = PyPDF2.PdfReader(f)
-                    content = '\n'.join([page.extract_text() for page in reader.pages])
-            except ImportError:
-                print("PyPDF2 not available in this environment")
-                return jsonify({"ok": False, "message": "PDF files not supported in this deployment environment. Please use TXT files."}), 400
-            except Exception as e:
-                print(f"Error reading PDF: {e}")
-                return jsonify({"ok": False, "message": f"Error reading PDF file: {str(e)}"}), 400
-        else:
-            # Try as text file
-            try:
-                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-            except Exception as e:
-                print(f"Error reading file as text: {e}")
-                content = ""
+        try:
+            if file_ext == '.txt':
+                # Read text file directly from memory
+                content = file.read().decode('utf-8', errors='ignore')
+                file.seek(0)  # Reset file pointer
+            elif file_ext == '.docx':
+                return jsonify({"ok": False, "message": "DOCX files not supported in serverless environment. Please use TXT files."}), 400
+            elif file_ext == '.pdf':
+                return jsonify({"ok": False, "message": "PDF files not supported in serverless environment. Please use TXT files."}), 400
+            else:
+                # Try as text file
+                content = file.read().decode('utf-8', errors='ignore')
+                file.seek(0)  # Reset file pointer
+        except Exception as file_read_error:
+            print(f"❌ File reading error: {file_read_error}")
+            return jsonify({"ok": False, "message": f"Error reading file: {str(file_read_error)}"}), 400
         
         print(f"=== FILE: {file.filename} ({file_ext}) ===")
         print(f"Content length: {len(content)}")
-        print(f"First 500 chars: {repr(content[:500])}")
+        print(f"First 200 chars: {repr(content[:200])}")
         print(f"=== END CONTENT ===")
-        
-        # Clean up temp file
-        try:
-            os.remove(filepath)
-        except:
-            pass
         
         # Extract data from content
         if not content.strip():
             print("❌ File content is empty")
-            return jsonify({"ok": False, "message": "Could not read file content. Please ensure it's a text file, PDF, or Word document."}), 400
+            return jsonify({"ok": False, "message": "File content is empty. Please check your file."}), 400
             
-        extracted_data = parse_medical_text(content)
+        try:
+            extracted_data = parse_medical_text(content)
+        except Exception as parse_error:
+            print(f"❌ Parsing error: {parse_error}")
+            return jsonify({"ok": False, "message": f"Error parsing medical data: {str(parse_error)}"}), 500
         
         if extracted_data:
-            # Fill missing values with defaults only for prediction
-            defaults = {
-                "age": 50, "sex": 1, "cp": 0, "trestbps": 120, "chol": 200,
-                "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0,
-                "oldpeak": 1.0, "slope": 1, "ca": 0, "thal": 1
-            }
-            
-            # Create prediction values (extracted + defaults for missing)
-            prediction_values = []
-            for field in ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]:
-                if field in extracted_data:
-                    prediction_values.append(extracted_data[field])
-                else:
-                    prediction_values.append(defaults[field])
-            
-            print(f"OCR Extracted: {extracted_data}")
-            print(f"Prediction values (with defaults): {prediction_values}")
-            
-            arr = np.array([prediction_values])
-            arr = scaler.transform(arr)
-            pred = model.predict_proba(arr)[0][1] * 100
-            
-            print(f"OCR Prediction: {pred}%")
-            
-            risk = "Low" if pred < 35 else "Moderate" if pred < 65 else "High"
-            
-            # Save prediction to database with all parameters
-            conn = sqlite3.connect("heart.db")
-            c = conn.cursor()
-            c.execute("""INSERT INTO predictions (email, risk_level, prediction_result, created_at, age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal) 
-                         VALUES (?, ?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                      (email, risk, pred, prediction_values[0], prediction_values[1], prediction_values[2], prediction_values[3], 
-                       prediction_values[4], prediction_values[5], prediction_values[6], prediction_values[7], 
-                       prediction_values[8], prediction_values[9], prediction_values[10], prediction_values[11], prediction_values[12]))
-            conn.commit()
-            conn.close()
-            
-            return jsonify({
-                "ok": True, 
-                "extracted": extracted_data,  # Only return actually extracted values
-                "file_content": content[:500],
-                "result": {"risk_level": risk, "prediction_result": pred}
-            })
+            try:
+                # Fill missing values with defaults only for prediction
+                defaults = {
+                    "age": 50, "sex": 1, "cp": 0, "trestbps": 120, "chol": 200,
+                    "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0,
+                    "oldpeak": 1.0, "slope": 1, "ca": 0, "thal": 1
+                }
+                
+                # Create prediction values (extracted + defaults for missing)
+                prediction_values = []
+                for field in ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]:
+                    if field in extracted_data:
+                        prediction_values.append(extracted_data[field])
+                    else:
+                        prediction_values.append(defaults[field])
+                
+                print(f"OCR Extracted: {extracted_data}")
+                print(f"Prediction values (with defaults): {prediction_values}")
+                
+                # Make prediction
+                arr = np.array([prediction_values])
+                arr = scaler.transform(arr)
+                pred = model.predict_proba(arr)[0][1] * 100
+                
+                print(f"OCR Prediction: {pred}%")
+                
+                risk = "Low" if pred < 35 else "Moderate" if pred < 65 else "High"
+                
+                # Save prediction to database with all parameters
+                conn = sqlite3.connect("heart.db")
+                c = conn.cursor()
+                c.execute("""INSERT INTO predictions (email, risk_level, prediction_result, created_at, age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal) 
+                             VALUES (?, ?, ?, datetime('now', 'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                          (email, risk, pred, prediction_values[0], prediction_values[1], prediction_values[2], prediction_values[3], 
+                           prediction_values[4], prediction_values[5], prediction_values[6], prediction_values[7], 
+                           prediction_values[8], prediction_values[9], prediction_values[10], prediction_values[11], prediction_values[12]))
+                conn.commit()
+                conn.close()
+                
+                return jsonify({
+                    "ok": True, 
+                    "extracted": extracted_data,  # Only return actually extracted values
+                    "file_content": content[:500],
+                    "result": {"risk_level": risk, "prediction_result": pred}
+                })
+            except Exception as prediction_error:
+                print(f"❌ Prediction error: {prediction_error}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({"ok": False, "message": f"Error making prediction: {str(prediction_error)}"}), 500
         else:
             print("❌ No medical data extracted from file")
-            return jsonify({"ok": False, "message": "No medical data found in file. Please check file format."}), 400
+            return jsonify({"ok": False, "message": "No medical data found in file. Please ensure your file contains medical parameters like Age, Gender, Blood Pressure, etc."}), 400
             
     except Exception as e:
         print(f"❌ OCR processing error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"ok": False, "message": f"OCR processing failed: {str(e)}"}), 500
+        return jsonify({"ok": False, "message": f"Server error during OCR processing: {str(e)}"}), 500
 
 # ---------- Parse Medical Text ----------
 def parse_medical_text(text):
