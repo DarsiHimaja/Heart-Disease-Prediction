@@ -331,8 +331,9 @@
   <div id="upload-tab" class="hidden glass-card p-8 rounded-2xl card-shadow">
     <label class="block text-gray-700 font-semibold mb-4 text-lg">📄 Upload Medical Report</label>
     <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
-      <input id="ocr-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.docx" class="mb-4">
+      <input id="ocr-file" type="file" accept=".pdf,.txt,.docx,.doc" class="mb-4">
       <p class="text-gray-500 mb-4">Drag & drop your medical report or click to browse</p>
+      <p class="text-xs text-gray-400">Supported: PDF, Word (.docx), Text (.txt) files</p>
     </div>
     <div class="flex space-x-4 mt-6">
       <button id="ocr-btn" class="btn-gradient text-white px-8 py-3 rounded-xl shadow-lg font-semibold flex-1">
@@ -342,7 +343,7 @@
         ❌ Cancel
       </button>
     </div>
-    <p class="text-sm text-gray-600 mt-4 text-center">Supports PDF, Word documents, and images. AI will extract values automatically.</p>
+    <p class="text-sm text-gray-600 mt-4 text-center">Supports PDF, Word documents (.docx), and text files (.txt). AI will extract medical values automatically.</p>
   </div>
 
   <!-- Animated Result -->
