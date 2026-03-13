@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
 import sqlite3
 import joblib
@@ -7,9 +7,11 @@ import os
 import hashlib
 import random
 import re
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True)
+app.secret_key = 'your-secret-key-change-this-in-production'  # Change this!
 
 # ---------- Database ----------
 def init_db():
@@ -101,13 +103,37 @@ def login():
 
     conn = sqlite3.connect("heart.db")
     c = conn.cursor()
-    c.execute("SELECT password FROM users WHERE email=?", (email,))
+    c.execute("SELECT name, password FROM users WHERE email=?", (email,))
     user = c.fetchone()
     conn.close()
 
-    if user and user[0] == hash_password(password):
-        return jsonify({"ok": True, "message": "Login successful"})
+    if user and user[1] == hash_password(password):
+        # Store user info in session
+        session['user_email'] = email
+        session['user_name'] = user[0]
+        session['logged_in'] = True
+        return jsonify({"ok": True, "message": "Login successful", "user": {"email": email, "name": user[0]}})
     return jsonify({"ok": False, "message": "Invalid credentials"}), 401
+
+# ---------- Logout ----------
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return jsonify({"ok": True, "message": "Logged out successfully"})
+
+# ---------- Check Login Status ----------
+@app.route("/check-auth", methods=["GET"])
+def check_auth():
+    if session.get('logged_in'):
+        return jsonify({
+            "ok": True, 
+            "logged_in": True,
+            "user": {
+                "email": session.get('user_email'),
+                "name": session.get('user_name')
+            }
+        })
+    return jsonify({"ok": True, "logged_in": False})
 
 # ---------- Predict ----------
 @app.route("/predict", methods=["POST"])
@@ -805,3 +831,6 @@ def extract_thal_from_text(text):
 # ---------- Run ----------
 if __name__ == "__main__":
     app.run(debug=True)
+
+# For Vercel deployment
+app = app

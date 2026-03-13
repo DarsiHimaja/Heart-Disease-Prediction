@@ -1,4 +1,17 @@
-const API_URL = "http://127.0.0.1:5000";
+// Dynamic API URL - works for both local and deployed
+const API_URL = (() => {
+  const hostname = window.location.hostname;
+  
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return "http://127.0.0.1:5000"; // Local development
+  } else {
+    return window.location.origin; // Deployed version
+  }
+})();
+
+console.log('Current hostname:', window.location.hostname);
+console.log('API URL:', API_URL); // Debug log
+
 let cachedResultsData = null; // Store results data globally
 
 // Flash message system
@@ -280,12 +293,17 @@ async function loginUser() {
   const res = await fetch(`${API_URL}/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: 'include', // Important for sessions
     body: JSON.stringify({ email, password }),
   });
 
   const data = await res.json();
   if (data.ok) {
+    // Still store in localStorage for frontend convenience
     localStorage.setItem("userEmail", email);
+    if (data.user && data.user.name) {
+      localStorage.setItem("userName", data.user.name);
+    }
     showFlash("🎉 Welcome back! Login successful.", "success");
     document.getElementById("login-btn").classList.add("hidden");
     document.getElementById("logout-btn").classList.remove("hidden");
@@ -296,12 +314,48 @@ async function loginUser() {
 }
 
 // -------- Logout --------
-function logoutUser() {
+async function logoutUser() {
+  // Call server logout
+  await fetch(`${API_URL}/logout`, {
+    method: "POST",
+    credentials: 'include'
+  });
+  
+  // Clear localStorage
   localStorage.removeItem("userEmail");
+  localStorage.removeItem("userName");
   document.getElementById("login-btn").classList.remove("hidden");
   document.getElementById("logout-btn").classList.add("hidden");
   showFlash("👋 Logged out successfully. See you soon!", "info");
   showPage("login");
+}
+
+// -------- Check Authentication Status --------
+async function checkAuthStatus() {
+  try {
+    const res = await fetch(`${API_URL}/check-auth`, {
+      credentials: 'include'
+    });
+    const data = await res.json();
+    
+    if (data.logged_in) {
+      // Update localStorage and UI
+      localStorage.setItem("userEmail", data.user.email);
+      if (data.user.name) {
+        localStorage.setItem("userName", data.user.name);
+      }
+      document.getElementById("login-btn").classList.add("hidden");
+      document.getElementById("logout-btn").classList.remove("hidden");
+    } else {
+      // Clear localStorage and UI
+      localStorage.removeItem("userEmail");
+      localStorage.removeItem("userName");
+      document.getElementById("login-btn").classList.remove("hidden");
+      document.getElementById("logout-btn").classList.add("hidden");
+    }
+  } catch (error) {
+    console.log('Auth check failed:', error);
+  }
 }
 
 // -------- Cancel Uploaded File --------
@@ -494,16 +548,11 @@ async function deleteResult(id) {
 
 // -------- Check Login Status on Page Load --------
 document.addEventListener('DOMContentLoaded', function() {
-  const email = localStorage.getItem("userEmail");
-  if (email) {
-    document.getElementById("login-btn").classList.add("hidden");
-    document.getElementById("logout-btn").classList.remove("hidden");
-  } else {
-    document.getElementById("login-btn").classList.remove("hidden");
-    document.getElementById("logout-btn").classList.add("hidden");
-  }
+  // Check server-side authentication status
+  checkAuthStatus();
   
   // Debug: Log current login status
+  const email = localStorage.getItem("userEmail");
   console.log('Login status:', email ? 'Logged in as ' + email : 'Not logged in');
 });
 
