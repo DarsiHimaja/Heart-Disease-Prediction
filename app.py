@@ -239,84 +239,41 @@ def debug_file():
 @app.route("/ocr", methods=["POST"])
 def ocr():
     try:
-        print("=== OCR REQUEST RECEIVED ===")
-        
         file = request.files.get('file')
         email = request.form.get('user_email')
         
         if not file or not email:
             return jsonify({"ok": False, "message": "File and email required"}), 400
         
-        print(f"Processing file: {file.filename}")
         file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else '.txt'
         content = ""
         
-        try:
-            # Read file content based on type
-            if file_ext == '.txt':
-                content = file.read().decode('utf-8', errors='ignore')
+        # Read file content based on type
+        if file_ext == '.txt':
+            content = file.read().decode('utf-8', errors='ignore')
+            
+        elif file_ext == '.docx':
+            try:
+                import docx
+                from io import BytesIO
+                doc = docx.Document(BytesIO(file.read()))
+                content = '\n'.join([p.text for p in doc.paragraphs if p.text.strip()])
+            except Exception as e:
+                return jsonify({"ok": False, "message": f"Error reading DOCX: {str(e)}"}), 400
                 
-            elif file_ext == '.docx':
-                try:
-                    from docx import Document
-                    from io import BytesIO
-                    
-                    # Read DOCX from memory
-                    file_stream = BytesIO(file.read())
-                    doc = Document(file_stream)
-                    
-                    # Extract text from paragraphs
-                    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-                    
-                    # Extract text from tables
-                    table_text = []
-                    for table in doc.tables:
-                        for row in table.rows:
-                            for cell in row.cells:
-                                if cell.text.strip():
-                                    table_text.append(cell.text.strip())
-                    
-                    content = '\n'.join(paragraphs + table_text)
-                    print(f"DOCX content extracted: {len(content)} characters")
-                    
-                except Exception as docx_error:
-                    print(f"DOCX processing error: {docx_error}")
-                    return jsonify({"ok": False, "message": f"Error processing DOCX file: {str(docx_error)}"}), 400
-                    
-            elif file_ext == '.pdf':
-                try:
-                    import PyPDF2
-                    from io import BytesIO
-                    
-                    # Read PDF from memory
-                    file_stream = BytesIO(file.read())
-                    pdf_reader = PyPDF2.PdfReader(file_stream)
-                    
-                    # Extract text from all pages
-                    pdf_text = []
-                    for page in pdf_reader.pages:
-                        pdf_text.append(page.extract_text())
-                    
-                    content = '\n'.join(pdf_text)
-                    print(f"PDF content extracted: {len(content)} characters")
-                    
-                except Exception as pdf_error:
-                    print(f"PDF processing error: {pdf_error}")
-                    return jsonify({"ok": False, "message": f"Error processing PDF file: {str(pdf_error)}"}), 400
-                    
-            else:
-                # Try as text file for other extensions
-                content = file.read().decode('utf-8', errors='ignore')
-                
-        except Exception as read_error:
-            print(f"File reading error: {read_error}")
-            return jsonify({"ok": False, "message": f"Error reading file: {str(read_error)}"}), 400
-        
-        print(f"Content extracted: {len(content)} characters")
-        print(f"First 200 chars: {repr(content[:200])}")
+        elif file_ext == '.pdf':
+            try:
+                import PyPDF2
+                from io import BytesIO
+                pdf_reader = PyPDF2.PdfReader(BytesIO(file.read()))
+                content = '\n'.join([page.extract_text() for page in pdf_reader.pages])
+            except Exception as e:
+                return jsonify({"ok": False, "message": f"Error reading PDF: {str(e)}"}), 400
+        else:
+            content = file.read().decode('utf-8', errors='ignore')
         
         if not content.strip():
-            return jsonify({"ok": False, "message": "No content found in file. Please check your file."}), 400
+            return jsonify({"ok": False, "message": "No content found in file"}), 400
         
         # Parse medical data
         extracted_data = parse_medical_text(content)
@@ -324,22 +281,13 @@ def ocr():
         if not extracted_data:
             return jsonify({
                 "ok": False, 
-                "message": "No medical data found. Please ensure your file contains medical parameters like Age, Gender, Blood Pressure, Cholesterol, etc.",
-                "file_content_preview": content[:300]
+                "message": "No medical data found. File preview: " + content[:200]
             }), 400
         
-        # Make prediction with extracted data
-        defaults = {
-            "age": 50, "sex": 1, "cp": 0, "trestbps": 120, "chol": 200,
-            "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0,
-            "oldpeak": 1.0, "slope": 1, "ca": 0, "thal": 1
-        }
+        # Make prediction
+        defaults = {"age": 50, "sex": 1, "cp": 0, "trestbps": 120, "chol": 200, "fbs": 0, "restecg": 0, "thalach": 150, "exang": 0, "oldpeak": 1.0, "slope": 1, "ca": 0, "thal": 1}
+        prediction_values = [extracted_data.get(field, defaults[field]) for field in ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]]
         
-        prediction_values = []
-        for field in ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal"]:
-            prediction_values.append(extracted_data.get(field, defaults[field]))
-        
-        # Make ML prediction
         arr = np.array([prediction_values])
         arr = scaler.transform(arr)
         pred = model.predict_proba(arr)[0][1] * 100
@@ -357,14 +305,10 @@ def ocr():
         return jsonify({
             "ok": True,
             "extracted": extracted_data,
-            "file_content": content[:500],
             "result": {"risk_level": risk, "prediction_result": pred}
         })
         
     except Exception as e:
-        print(f"OCR Error: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"ok": False, "message": f"Processing failed: {str(e)}"}), 500
 
 # ---------- Parse Medical Text ----------
