@@ -836,5 +836,5 @@ def extract_thal_from_text(text):
 if __name__ == "__main__":
     app.run(debug=True)
 
-# For Vercel deployment
-app = app
+# For Vercel deployment - this is the WSGI application
+vercel_app = app
