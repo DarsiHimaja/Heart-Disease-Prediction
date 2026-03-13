@@ -71,6 +71,10 @@ def hash_password(password):
 def home():
     return render_template("index.html")
 
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # No content response
+
 # ---------- Register ----------
 @app.route("/register", methods=["POST"])
 def register():

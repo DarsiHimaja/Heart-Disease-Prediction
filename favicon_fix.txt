@@ -1,0 +1,5 @@
+# Add this route to your app.py file
+
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # No content response
